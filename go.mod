@@ -10,7 +10,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.32.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	go.uber.org/zap v1.20.0
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/sys v0.0.0-20211204120058-94396e421777
