@@ -24,15 +24,102 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/FerretDB/FerretDB/integration/setup"
 	"github.com/FerretDB/FerretDB/integration/shareddata"
 )
 
-func TestQueryLogicalOr(t *testing.T) {
-	setup.SkipForTigris(t)
-
+func TestQueryLogicalAnd(t *testing.T) {
 	t.Parallel()
-	ctx, collection := setup.Setup(t, shareddata.Scalars)
+	ctx, collection := setup(t, shareddata.Scalars)
+
+	for name, tc := range map[string]struct {
+		filter      any
+		expectedIDs []any
+		err         *mongo.CommandError
+	}{
+		"And": {
+			filter: bson.A{
+				bson.D{{"value", bson.D{{"$gt", 0}}}},
+				bson.D{{"value", bson.D{{"$lte", 42}}}},
+			},
+			expectedIDs: []any{"double-smallest", "double-whole", "int32", "int64"},
+		},
+		"BadInput": {
+			filter: nil,
+			err: &mongo.CommandError{
+				Code:    2,
+				Message: "$and must be an array",
+				Name:    "BadValue",
+			},
+		},
+		"BadExpressionValue": {
+			filter: bson.A{
+				bson.D{{"value", bson.D{{"$gt", 0}}}},
+				nil,
+			},
+			err: &mongo.CommandError{
+				Code:    2,
+				Message: "$or/$and/$nor entries need to be full objects",
+				Name:    "BadValue",
+			},
+		},
+		"AndOr": {
+			filter: bson.A{
+				bson.D{{"value", bson.D{{"$gt", 42}}}},
+				bson.D{{"$or", bson.A{
+					bson.D{{"value", bson.D{{"$lt", 0}}}},
+					bson.D{{"value", bson.D{{"$lt", 42}}}},
+				}}},
+			},
+			expectedIDs: []any{},
+		},
+		"AndAnd": {
+			filter: bson.A{
+				bson.D{{"$and", bson.A{
+					bson.D{{"value", bson.D{{"$gt", int32(0)}}}},
+					bson.D{{"value", bson.D{{"$lte", int32(42)}}}},
+				}}},
+				bson.D{{"value", bson.D{{"$type", "int"}}}},
+			},
+			expectedIDs: []any{"int32"},
+		},
+		"AndAndAnd": {
+			filter: bson.A{
+				bson.D{{"$and", bson.A{
+					bson.D{{"value", bson.D{{"$gt", int32(0)}}}},
+					bson.D{{"$and", bson.A{
+						bson.D{{"value", bson.D{{"$lt", int32(43)}}}},
+						bson.D{{"value", bson.D{{"$eq", int32(42)}}}},
+					}}},
+				}}},
+				bson.D{{"value", bson.D{{"$type", "int"}}}},
+			},
+			expectedIDs: []any{"int32"},
+		},
+	} {
+		name, tc := name, tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			filter := bson.D{{"$and", tc.filter}}
+			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
+			if tc.err != nil {
+				require.Nil(t, tc.expectedIDs)
+				AssertEqualError(t, *tc.err, err)
+				return
+			}
+			require.NoError(t, err)
+
+			var actual []bson.D
+			err = cursor.All(ctx, &actual)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedIDs, CollectIDs(t, actual))
+		})
+	}
+}
+
+func TestQueryLogicalOr(t *testing.T) {
+	t.Parallel()
+	ctx, collection := setup(t, shareddata.Scalars)
 
 	for name, tc := range map[string]struct {
 		filter      any
@@ -41,8 +128,8 @@ func TestQueryLogicalOr(t *testing.T) {
 	}{
 		"Or": {
 			filter: bson.A{
-				bson.D{{"v", bson.D{{"$lt", 0}}}},
-				bson.D{{"v", bson.D{{"$lt", 42}}}},
+				bson.D{{"value", bson.D{{"$lt", 0}}}},
+				bson.D{{"value", bson.D{{"$lt", 42}}}},
 			},
 			expectedIDs: []any{
 				"double-negative-infinity", "double-negative-zero",
@@ -83,7 +170,7 @@ func TestQueryLogicalOr(t *testing.T) {
 		},
 		"BadExpressionValue": {
 			filter: bson.A{
-				bson.D{{"v", bson.D{{"$gt", 0}}}},
+				bson.D{{"value", bson.D{{"$gt", 0}}}},
 				nil,
 			},
 			err: &mongo.CommandError{
@@ -115,10 +202,8 @@ func TestQueryLogicalOr(t *testing.T) {
 }
 
 func TestQueryLogicalNor(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
-	ctx, collection := setup.Setup(t, shareddata.Scalars)
+	ctx, collection := setup(t, shareddata.Scalars)
 
 	for name, tc := range map[string]struct {
 		filter      any
@@ -127,8 +212,8 @@ func TestQueryLogicalNor(t *testing.T) {
 	}{
 		"Nor": {
 			filter: bson.A{
-				bson.D{{"v", bson.D{{"$gt", 0}}}},
-				bson.D{{"v", bson.D{{"$gt", 42}}}},
+				bson.D{{"value", bson.D{{"$gt", 0}}}},
+				bson.D{{"value", bson.D{{"$gt", 42}}}},
 			},
 			expectedIDs: []any{
 				"binary", "binary-empty", "bool-false", "bool-true",
@@ -150,7 +235,7 @@ func TestQueryLogicalNor(t *testing.T) {
 		},
 		"BadExpressionValue": {
 			filter: bson.A{
-				bson.D{{"v", bson.D{{"$gt", 0}}}},
+				bson.D{{"value", bson.D{{"$gt", 0}}}},
 				nil,
 			},
 			err: &mongo.CommandError{
@@ -182,11 +267,9 @@ func TestQueryLogicalNor(t *testing.T) {
 }
 
 func TestQueryLogicalNot(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		filter      bson.D
@@ -194,10 +277,9 @@ func TestQueryLogicalNot(t *testing.T) {
 		err         *mongo.CommandError
 	}{
 		"Not": {
-			filter: bson.D{{"v", bson.D{{"$not", bson.D{{"$eq", 42}}}}}},
+			filter: bson.D{{"value", bson.D{{"$not", bson.D{{"$eq", 42}}}}}},
 			expectedIDs: []any{
-				"array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-two",
+				"array-embedded", "array-empty", "array-null", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -223,9 +305,9 @@ func TestQueryLogicalNot(t *testing.T) {
 			},
 		},
 		"NotEqNull": {
-			filter: bson.D{{"v", bson.D{{"$not", bson.D{{"$eq", nil}}}}}},
+			filter: bson.D{{"value", bson.D{{"$not", bson.D{{"$eq", nil}}}}}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-two",
+				"array", "array-empty", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -241,10 +323,9 @@ func TestQueryLogicalNot(t *testing.T) {
 			},
 		},
 		"ValueRegex": {
-			filter: bson.D{{"v", bson.D{{"$not", primitive.Regex{Pattern: "^fo"}}}}},
+			filter: bson.D{{"value", bson.D{{"$not", primitive.Regex{Pattern: "^fo"}}}}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-null", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -263,8 +344,7 @@ func TestQueryLogicalNot(t *testing.T) {
 		"NoSuchFieldRegex": {
 			filter: bson.D{{"no-such-field", bson.D{{"$not", primitive.Regex{Pattern: "/someregex/"}}}}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-three", "array-three-reverse", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -282,7 +362,7 @@ func TestQueryLogicalNot(t *testing.T) {
 			},
 		},
 		"NestedNot": {
-			filter:      bson.D{{"v", bson.D{{"$not", bson.D{{"$not", bson.D{{"$eq", 42}}}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$not", bson.D{{"$not", bson.D{{"$eq", 42}}}}}}}},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole", "int32", "int64"},
 		},
 	} {

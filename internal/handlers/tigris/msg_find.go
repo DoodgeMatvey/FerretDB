@@ -17,6 +17,7 @@ package tigris
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/FerretDB/FerretDB/internal/handlers/common"
 	"github.com/FerretDB/FerretDB/internal/types"
@@ -52,7 +53,6 @@ func (h *Handler) MsgFind(ctx context.Context, msg *wire.OpMsg) (*wire.OpMsg, er
 		"hint",
 		"batchSize",
 		"singleBatch",
-		"maxTimeMS",
 		"readConcern",
 		"max",
 		"min",
@@ -75,6 +75,18 @@ func (h *Handler) MsgFind(ctx context.Context, msg *wire.OpMsg) (*wire.OpMsg, er
 		if limit, err = common.GetWholeNumberParam(l); err != nil {
 			return nil, err
 		}
+	}
+
+	maxTimeMS, err := common.GetOptionalPositiveNumber(document, "maxTimeMS")
+	if err != nil {
+		return nil, err
+	}
+
+	if maxTimeMS != 0 {
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, time.Duration(maxTimeMS)*time.Millisecond)
+		defer cancel()
+
+		ctx = ctxWithTimeout
 	}
 
 	var fp fetchParam

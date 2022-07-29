@@ -26,44 +26,41 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/FerretDB/FerretDB/integration/setup"
 	"github.com/FerretDB/FerretDB/integration/shareddata"
 	"github.com/FerretDB/FerretDB/internal/util/must"
 )
 
 func TestQueryComparisonImplicit(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		filter      bson.D
 		expectedIDs []any
 	}{
 		"Document": {
-			filter:      bson.D{{"v", bson.D{{"foo", int32(42)}, {"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}}}},
+			filter:      bson.D{{"value", bson.D{{"foo", int32(42)}, {"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}}}},
 			expectedIDs: []any{"document-composite"},
 		},
 		"DocumentReverse": {
-			filter:      bson.D{{"v", bson.D{{"array", bson.A{int32(42), "foo", nil}}, {"42", "foo"}, {"foo", int32(42)}}}},
+			filter:      bson.D{{"value", bson.D{{"array", bson.A{int32(42), "foo", nil}}, {"42", "foo"}, {"foo", int32(42)}}}},
 			expectedIDs: []any{"document-composite-reverse"},
 		},
 		"DocumentNull": {
-			filter:      bson.D{{"v", bson.D{{"foo", nil}}}},
+			filter:      bson.D{{"value", bson.D{{"foo", nil}}}},
 			expectedIDs: []any{"document-null"},
 		},
 		"DocumentEmpty": {
-			filter:      bson.D{{"v", bson.D{}}},
+			filter:      bson.D{{"value", bson.D{}}},
 			expectedIDs: []any{"document-empty"},
 		},
 		"DocumentShuffledKeys": {
-			filter:      bson.D{{"v", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}},
+			filter:      bson.D{{"value", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}},
 			expectedIDs: []any{},
 		},
 		"DocumentDotNotation": {
-			filter:      bson.D{{"v.foo", int32(42)}},
+			filter:      bson.D{{"value.foo", int32(42)}},
 			expectedIDs: []any{"document", "document-composite", "document-composite-reverse"},
 		},
 		"DocumentDotNotationNoSuchField": {
@@ -72,99 +69,99 @@ func TestQueryComparisonImplicit(t *testing.T) {
 		},
 
 		"Array": {
-			filter:      bson.D{{"v", bson.A{int32(42), "foo", nil}}},
+			filter:      bson.D{{"value", bson.A{int32(42), "foo", nil}}},
 			expectedIDs: []any{"array-three"},
 		},
 		"ArrayReverse": {
-			filter:      bson.D{{"v", bson.A{nil, "foo", int32(42)}}},
+			filter:      bson.D{{"value", bson.A{nil, "foo", int32(42)}}},
 			expectedIDs: []any{"array-three-reverse"},
 		},
 		"ArrayNull": {
-			filter:      bson.D{{"v", bson.A{nil}}},
+			filter:      bson.D{{"value", bson.A{nil}}},
 			expectedIDs: []any{"array-null"},
 		},
 		"ArrayEmpty": {
-			filter:      bson.D{{"v", bson.A{}}},
-			expectedIDs: []any{"array-empty", "array-empty-nested"},
+			filter:      bson.D{{"value", bson.A{}}},
+			expectedIDs: []any{"array-empty"},
 		},
 		"ArrayNoSuchField": {
 			filter:      bson.D{{"no-such-field", bson.A{42}}},
 			expectedIDs: []any{},
 		},
 		"ArrayEmbedded": {
-			filter:      bson.D{{"v", bson.A{bson.A{int32(42), "foo"}, nil}}},
-			expectedIDs: []any{"array-first-embedded"},
+			filter:      bson.D{{"value", bson.A{bson.A{int32(42), "foo"}, nil}}},
+			expectedIDs: []any{"array-embedded"},
 		},
 		"LongArrayEmbedded": {
-			filter:      bson.D{{"v", bson.A{bson.A{int32(42), "foo"}, nil, "foo"}}},
+			filter:      bson.D{{"value", bson.A{bson.A{int32(42), "foo"}, nil, "foo"}}},
 			expectedIDs: []any{},
 		},
 		"ArraySlice": {
-			filter:      bson.D{{"v", bson.A{int32(42), "foo"}}},
-			expectedIDs: []any{"array-first-embedded", "array-last-embedded", "array-middle-embedded"},
+			filter:      bson.D{{"value", bson.A{int32(42), "foo"}}},
+			expectedIDs: []any{"array-embedded"},
 		},
 		"ArrayShuffledValues": {
-			filter:      bson.D{{"v", bson.A{"foo", nil, int32(42)}}},
+			filter:      bson.D{{"value", bson.A{"foo", nil, int32(42)}}},
 			expectedIDs: []any{},
 		},
 		"ArrayDotNotationNoSuchField": {
-			filter:      bson.D{{"v.some.0", bson.A{42}}},
+			filter:      bson.D{{"value.some.0", bson.A{42}}},
 			expectedIDs: []any{},
 		},
 
 		"Double": {
-			filter:      bson.D{{"v", 42.13}},
+			filter:      bson.D{{"value", 42.13}},
 			expectedIDs: []any{"array-two", "double"},
 		},
 		"DoubleNegativeInfinity": {
-			filter:      bson.D{{"v", math.Inf(-1)}},
+			filter:      bson.D{{"value", math.Inf(-1)}},
 			expectedIDs: []any{"double-negative-infinity"},
 		},
 		"DoublePositiveInfinity": {
-			filter:      bson.D{{"v", math.Inf(+1)}},
+			filter:      bson.D{{"value", math.Inf(+1)}},
 			expectedIDs: []any{"double-positive-infinity"},
 		},
 		"DoubleMax": {
-			filter:      bson.D{{"v", math.MaxFloat64}},
+			filter:      bson.D{{"value", math.MaxFloat64}},
 			expectedIDs: []any{"double-max"},
 		},
 		"DoubleSmallest": {
-			filter:      bson.D{{"v", math.SmallestNonzeroFloat64}},
+			filter:      bson.D{{"value", math.SmallestNonzeroFloat64}},
 			expectedIDs: []any{"double-smallest"},
 		},
 		"DoubleBig": {
-			filter:      bson.D{{"v", float64(2 << 60)}},
+			filter:      bson.D{{"value", float64(2 << 60)}},
 			expectedIDs: []any{"double-big"},
 		},
 		"DoubleNaN": {
-			filter:      bson.D{{"v", math.NaN()}},
+			filter:      bson.D{{"value", math.NaN()}},
 			expectedIDs: []any{"array-two", "double-nan"},
 		},
 
 		"String": {
-			filter:      bson.D{{"v", "foo"}},
+			filter:      bson.D{{"value", "foo"}},
 			expectedIDs: []any{"array-three", "array-three-reverse", "string"},
 		},
 		"StringEmpty": {
-			filter:      bson.D{{"v", ""}},
+			filter:      bson.D{{"value", ""}},
 			expectedIDs: []any{"string-empty"},
 		},
 
 		"Binary": {
-			filter:      bson.D{{"v", primitive.Binary{Subtype: 0x80, Data: []byte{42, 0, 13}}}},
+			filter:      bson.D{{"value", primitive.Binary{Subtype: 0x80, Data: []byte{42, 0, 13}}}},
 			expectedIDs: []any{"binary"},
 		},
 		"BinaryEmpty": {
-			filter:      bson.D{{"v", primitive.Binary{}}},
+			filter:      bson.D{{"value", primitive.Binary{}}},
 			expectedIDs: []any{"binary-empty"},
 		},
 
 		"BoolFalse": {
-			filter:      bson.D{{"v", false}},
+			filter:      bson.D{{"value", false}},
 			expectedIDs: []any{"bool-false"},
 		},
 		"BoolTrue": {
-			filter:      bson.D{{"v", true}},
+			filter:      bson.D{{"value", true}},
 			expectedIDs: []any{"bool-true"},
 		},
 
@@ -173,17 +170,13 @@ func TestQueryComparisonImplicit(t *testing.T) {
 			expectedIDs: []any{},
 		},
 		"ValueNull": {
-			filter: bson.D{{"v", nil}},
-			expectedIDs: []any{
-				"array-first-embedded", "array-last-embedded", "array-middle-embedded", "array-null",
-				"array-three", "array-three-reverse", "null",
-			},
+			filter:      bson.D{{"value", nil}},
+			expectedIDs: []any{"array-embedded", "array-null", "array-three", "array-three-reverse", "null"},
 		},
 		"NoSuchFieldNull": {
 			filter: bson.D{{"no-such-field", nil}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-three", "array-three-reverse", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -201,12 +194,12 @@ func TestQueryComparisonImplicit(t *testing.T) {
 		},
 
 		"ValueNumber": {
-			filter:      bson.D{{"v", 42}},
+			filter:      bson.D{{"value", 42}},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole", "int32", "int64"},
 		},
 
 		"ValueRegex": {
-			filter:      bson.D{{"v", primitive.Regex{Pattern: "^fo"}}},
+			filter:      bson.D{{"value", primitive.Regex{Pattern: "^fo"}}},
 			expectedIDs: []any{"array-three", "array-three-reverse", "string"},
 		},
 	} {
@@ -226,249 +219,244 @@ func TestQueryComparisonImplicit(t *testing.T) {
 }
 
 func TestQueryComparisonEq(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		filter      bson.D
 		expectedIDs []any
 	}{
 		"Document": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.D{{"foo", int32(42)}, {"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.D{{"foo", int32(42)}, {"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}}}}}},
 			expectedIDs: []any{"document-composite"},
 		},
 		"DocumentShuffledKeys": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}}}},
 			expectedIDs: []any{},
 		},
 		"DocumentDotNotation": {
-			filter:      bson.D{{"v.foo", bson.D{{"$eq", int32(42)}}}},
+			filter:      bson.D{{"value.foo", bson.D{{"$eq", int32(42)}}}},
 			expectedIDs: []any{"document", "document-composite", "document-composite-reverse"},
 		},
 		"DocumentReverse": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.D{{"array", bson.A{int32(42), "foo", nil}}, {"42", "foo"}, {"foo", int32(42)}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.D{{"array", bson.A{int32(42), "foo", nil}}, {"42", "foo"}, {"foo", int32(42)}}}}}},
 			expectedIDs: []any{"document-composite-reverse"},
 		},
 		"DocumentNull": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.D{{"foo", nil}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.D{{"foo", nil}}}}}},
 			expectedIDs: []any{"document-null"},
 		},
 		"DocumentEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.D{}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.D{}}}}},
 			expectedIDs: []any{"document-empty"},
 		},
 
 		"Array": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{int32(42), "foo", nil}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{int32(42), "foo", nil}}}}},
 			expectedIDs: []any{"array-three"},
 		},
 		"ArrayEmbedded": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{bson.A{int32(42), "foo"}, nil}}}}},
-			expectedIDs: []any{"array-first-embedded"},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{bson.A{int32(42), "foo"}, nil}}}}},
+			expectedIDs: []any{"array-embedded"},
 		},
 		"LongArrayEmbedded": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{bson.A{int32(42), "foo"}, nil, "foo"}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{bson.A{int32(42), "foo"}, nil, "foo"}}}}},
 			expectedIDs: []any{},
 		},
 		"ArraySlice": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{int32(42), "foo"}}}}},
-			expectedIDs: []any{"array-first-embedded", "array-last-embedded", "array-middle-embedded"},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{int32(42), "foo"}}}}},
+			expectedIDs: []any{"array-embedded"},
 		},
 		"ArrayShuffledValues": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{"foo", nil, int32(42)}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{"foo", nil, int32(42)}}}}},
 			expectedIDs: []any{},
 		},
 		"ArrayReverse": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{nil, "foo", int32(42)}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{nil, "foo", int32(42)}}}}},
 			expectedIDs: []any{"array-three-reverse"},
 		},
 		"ArrayNull": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{nil}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{nil}}}}},
 			expectedIDs: []any{"array-null"},
 		},
 		"ArrayEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", bson.A{}}}}},
-			expectedIDs: []any{"array-empty", "array-empty-nested"},
+			filter:      bson.D{{"value", bson.D{{"$eq", bson.A{}}}}},
+			expectedIDs: []any{"array-empty"},
 		},
 
 		"Double": {
-			filter:      bson.D{{"v", bson.D{{"$eq", 42.13}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", 42.13}}}},
 			expectedIDs: []any{"array-two", "double"},
 		},
 		"DoubleWhole": {
-			filter:      bson.D{{"v", bson.D{{"$eq", 42.0}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", 42.0}}}},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole", "int32", "int64"},
 		},
 		"DoubleZero": {
-			filter:      bson.D{{"v", bson.D{{"$eq", 0.0}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", 0.0}}}},
 			expectedIDs: []any{"double-negative-zero", "double-zero", "int32-zero", "int64-zero"},
 		},
 		"DoubleNegativeZero": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.Copysign(0, -1)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.Copysign(0, -1)}}}},
 			expectedIDs: []any{"double-negative-zero", "double-zero", "int32-zero", "int64-zero"},
 		},
 		"DoubleMax": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.MaxFloat64}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.MaxFloat64}}}},
 			expectedIDs: []any{"double-max"},
 		},
 		"DoubleSmallest": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.SmallestNonzeroFloat64}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.SmallestNonzeroFloat64}}}},
 			expectedIDs: []any{"double-smallest"},
 		},
 		"DoublePositiveInfinity": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.Inf(+1)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.Inf(+1)}}}},
 			expectedIDs: []any{"double-positive-infinity"},
 		},
 		"DoubleNegativeInfinity": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.Inf(-1)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.Inf(-1)}}}},
 			expectedIDs: []any{"double-negative-infinity"},
 		},
 		"DoubleNaN": {
-			filter:      bson.D{{"v", bson.D{{"$eq", math.NaN()}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", math.NaN()}}}},
 			expectedIDs: []any{"array-two", "double-nan"},
 		},
 		"DoubleBigInt64": {
-			filter:      bson.D{{"v", bson.D{{"$eq", float64(2 << 61)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", float64(2 << 61)}}}},
 			expectedIDs: []any{"int64-big"},
 		},
 		"DoubleBigInt64PlusOne": {
-			filter:      bson.D{{"v", bson.D{{"$eq", float64(2<<61 + 1)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", float64(2<<61 + 1)}}}},
 			expectedIDs: []any{"int64-big"},
 		},
 
 		"String": {
-			filter:      bson.D{{"v", bson.D{{"$eq", "foo"}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", "foo"}}}},
 			expectedIDs: []any{"array-three", "array-three-reverse", "string"},
 		},
 		"StringDouble": {
-			filter:      bson.D{{"v", bson.D{{"$eq", "42.13"}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", "42.13"}}}},
 			expectedIDs: []any{"string-double"},
 		},
 		"StringWhole": {
-			filter:      bson.D{{"v", bson.D{{"$eq", "42"}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", "42"}}}},
 			expectedIDs: []any{"string-whole"},
 		},
 		"StringEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", ""}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", ""}}}},
 			expectedIDs: []any{"string-empty"},
 		},
 
 		"Binary": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Binary{Subtype: 0x80, Data: []byte{42, 0, 13}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Binary{Subtype: 0x80, Data: []byte{42, 0, 13}}}}}},
 			expectedIDs: []any{"binary"},
 		},
 		"BinaryEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Binary{Data: []byte{}}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Binary{Data: []byte{}}}}}},
 			expectedIDs: []any{"binary-empty"},
 		},
 
 		"ObjectID": {
-			filter:      bson.D{{"v", bson.D{{"$eq", must.NotFail(primitive.ObjectIDFromHex("000102030405060708091011"))}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", must.NotFail(primitive.ObjectIDFromHex("000102030405060708091011"))}}}},
 			expectedIDs: []any{"objectid"},
 		},
 		"ObjectIDEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.NilObjectID}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.NilObjectID}}}},
 			expectedIDs: []any{"objectid-empty"},
 		},
 
 		"BoolFalse": {
-			filter:      bson.D{{"v", bson.D{{"$eq", false}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", false}}}},
 			expectedIDs: []any{"bool-false"},
 		},
 		"BoolTrue": {
-			filter:      bson.D{{"v", bson.D{{"$eq", true}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", true}}}},
 			expectedIDs: []any{"bool-true"},
 		},
 
 		"Datetime": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(2021, 11, 1, 10, 18, 42, 123000000, time.UTC))}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(2021, 11, 1, 10, 18, 42, 123000000, time.UTC))}}}},
 			expectedIDs: []any{"datetime"},
 		},
 		"DatetimeEpoch": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Unix(0, 0))}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Unix(0, 0))}}}},
 			expectedIDs: []any{"datetime-epoch"},
 		},
 		"DatetimeYearMax": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC))}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC))}}}},
 			expectedIDs: []any{"datetime-year-min"},
 		},
 		"DatetimeYearMin": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(9999, 12, 31, 23, 59, 59, 999000000, time.UTC))}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.NewDateTimeFromTime(time.Date(9999, 12, 31, 23, 59, 59, 999000000, time.UTC))}}}},
 			expectedIDs: []any{"datetime-year-max"},
 		},
 
 		"Null": {
-			filter: bson.D{{"v", bson.D{{"$eq", nil}}}},
-			expectedIDs: []any{
-				"array-first-embedded", "array-last-embedded", "array-middle-embedded", "array-null", "array-three",
-				"array-three-reverse", "null",
-			},
+			filter:      bson.D{{"value", bson.D{{"$eq", nil}}}},
+			expectedIDs: []any{"array-embedded", "array-null", "array-three", "array-three-reverse", "null"},
 		},
 
 		"RegexWithoutOption": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Regex{Pattern: "foo"}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Regex{Pattern: "foo"}}}}},
 			expectedIDs: []any{},
 		},
 		"RegexWithOption": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Regex{Pattern: "foo", Options: "i"}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Regex{Pattern: "foo", Options: "i"}}}}},
 			expectedIDs: []any{"regex"},
 		},
 		"RegexEmpty": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Regex{}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Regex{}}}}},
 			expectedIDs: []any{"regex-empty"},
 		},
 
 		"Int32": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int32(42)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int32(42)}}}},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole", "int32", "int64"},
 		},
 		"Int32Zero": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int32(0)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int32(0)}}}},
 			expectedIDs: []any{"double-negative-zero", "double-zero", "int32-zero", "int64-zero"},
 		},
 		"Int32Max": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int32(math.MaxInt32)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int32(math.MaxInt32)}}}},
 			expectedIDs: []any{"int32-max"},
 		},
 		"Int32Min": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int32(math.MinInt32)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int32(math.MinInt32)}}}},
 			expectedIDs: []any{"int32-min"},
 		},
 
 		"Timestamp": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Timestamp{T: 42, I: 13}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Timestamp{T: 42, I: 13}}}}},
 			expectedIDs: []any{"timestamp"},
 		},
 		"TimestampI": {
-			filter:      bson.D{{"v", bson.D{{"$eq", primitive.Timestamp{I: 1}}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", primitive.Timestamp{I: 1}}}}},
 			expectedIDs: []any{"timestamp-i"},
 		},
 
 		"Int64": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(42)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(42)}}}},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole", "int32", "int64"},
 		},
 		"Int64Zero": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(0)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(0)}}}},
 			expectedIDs: []any{"double-negative-zero", "double-zero", "int32-zero", "int64-zero"},
 		},
 		"Int64Max": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(math.MaxInt64)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(math.MaxInt64)}}}},
 			expectedIDs: []any{"int64-max"},
 		},
 		"Int64Min": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(math.MinInt64)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(math.MinInt64)}}}},
 			expectedIDs: []any{"int64-min"},
 		},
 		"Int64DoubleBig": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(2 << 60)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(2 << 60)}}}},
 			expectedIDs: []any{"double-big"},
 		},
 		"Int64DoubleBigPlusOne": {
-			filter:      bson.D{{"v", bson.D{{"$eq", int64(2<<60 + 1)}}}},
+			filter:      bson.D{{"value", bson.D{{"$eq", int64(2<<60 + 1)}}}},
 			expectedIDs: []any{},
 		},
 
@@ -479,8 +467,7 @@ func TestQueryComparisonEq(t *testing.T) {
 		"NoSuchFieldNull": {
 			filter: bson.D{{"no-such-field", bson.D{{"$eq", nil}}}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-three", "array-three-reverse", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -513,67 +500,16 @@ func TestQueryComparisonEq(t *testing.T) {
 }
 
 func TestQueryComparisonGt(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		value       any
 		expectedIDs []any
 		err         *mongo.CommandError
 	}{
-		// TODO document
-
-		"ArrayEmpty": {
-			value: bson.A{},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArrayOne": {
-			value: bson.A{int32(42)},
-			expectedIDs: []any{
-				"array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-three", "array-two",
-			},
-		},
-		"Array": {
-			value:       bson.A{int32(42), "foo", nil},
-			expectedIDs: []any{"array-embedded", "array-empty-nested", "array-first-embedded", "array-two"},
-		},
-		"ArrayReverse": {
-			value: bson.A{nil, "foo", int32(42)},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-three", "array-two",
-			},
-		},
-		"ArrayNull": {
-			value: bson.A{nil},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArrayEmbedded": {
-			value:       bson.A{bson.A{int32(42), "foo"}, nil},
-			expectedIDs: []any{"array-embedded"},
-		},
-		"LongArrayEmbedded": {
-			value:       bson.A{bson.A{int32(42), "foo"}, nil, "foo"},
-			expectedIDs: []any{"array-embedded"},
-		},
-		"ArraySlice": {
-			value:       bson.A{int32(42), "foo"},
-			expectedIDs: []any{"array-embedded", "array-empty-nested", "array-first-embedded", "array-three", "array-two"},
-		},
-		"ArrayShuffledValues": {
-			value:       bson.A{"foo", nil, int32(42)},
-			expectedIDs: []any{"array-embedded", "array-empty-nested", "array-first-embedded"},
-		},
+		// TODO document, array
 
 		"Double": {
 			value: 41.13,
@@ -661,7 +597,7 @@ func TestQueryComparisonGt(t *testing.T) {
 			err: &mongo.CommandError{
 				Code:    2,
 				Name:    "BadValue",
-				Message: "Can't have RegEx as arg to predicate over field 'v'.",
+				Message: "Can't have RegEx as arg to predicate over field 'value'.",
 			},
 		},
 
@@ -720,7 +656,7 @@ func TestQueryComparisonGt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$gt", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$gt", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -738,70 +674,16 @@ func TestQueryComparisonGt(t *testing.T) {
 }
 
 func TestQueryComparisonGte(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		value       any
 		expectedIDs []any
 		err         *mongo.CommandError
 	}{
-		// TODO document
-
-		"ArrayEmpty": {
-			value: bson.A{},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArrayOne": {
-			value: bson.A{int32(42)},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-three", "array-two",
-			},
-		},
-		"Array": {
-			value:       bson.A{int32(42), "foo", nil},
-			expectedIDs: []any{"array-embedded", "array-empty-nested", "array-first-embedded", "array-three", "array-two"},
-		},
-		"ArrayReverse": {
-			value: bson.A{nil, "foo", int32(42)},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArrayNull": {
-			value: bson.A{nil},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArrayEmbedded": {
-			value:       bson.A{bson.A{int32(42), "foo"}, nil},
-			expectedIDs: []any{"array-embedded", "array-first-embedded"},
-		},
-		"LongArrayEmbedded": {
-			value:       bson.A{bson.A{int32(42), "foo"}, nil, "foo"},
-			expectedIDs: []any{"array-embedded"},
-		},
-		"ArraySlice": {
-			value: bson.A{int32(42), "foo"},
-			expectedIDs: []any{
-				"array-embedded", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-three", "array-two",
-			},
-		},
-		"ArrayShuffledValues": {
-			value:       bson.A{"foo", nil, int32(42)},
-			expectedIDs: []any{"array-embedded", "array-empty-nested", "array-first-embedded"},
-		},
+		// TODO document, array
 
 		"Double": {
 			value: 42.13,
@@ -877,11 +759,8 @@ func TestQueryComparisonGte(t *testing.T) {
 		},
 
 		"Null": {
-			value: nil,
-			expectedIDs: []any{
-				"array-first-embedded", "array-last-embedded", "array-middle-embedded", "array-null", "array-three",
-				"array-three-reverse", "null",
-			},
+			value:       nil,
+			expectedIDs: []any{"array-embedded", "array-null", "array-three", "array-three-reverse", "null"},
 		},
 
 		"Regex": {
@@ -889,7 +768,7 @@ func TestQueryComparisonGte(t *testing.T) {
 			err: &mongo.CommandError{
 				Code:    2,
 				Name:    "BadValue",
-				Message: "Can't have RegEx as arg to predicate over field 'v'.",
+				Message: "Can't have RegEx as arg to predicate over field 'value'.",
 			},
 		},
 
@@ -938,7 +817,7 @@ func TestQueryComparisonGte(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$gte", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$gte", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -956,73 +835,16 @@ func TestQueryComparisonGte(t *testing.T) {
 }
 
 func TestQueryComparisonLt(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		value       any
 		expectedIDs []any
 		err         *mongo.CommandError
 	}{
-		// TODO document
-
-		"ArrayEmpty": {
-			value:       bson.A{},
-			expectedIDs: []any{},
-		},
-		"ArrayOne": {
-			value: bson.A{int32(42)},
-			expectedIDs: []any{
-				"array-empty", "array-empty-nested", "array-last-embedded", "array-middle-embedded",
-				"array-null", "array-three-reverse",
-			},
-		},
-		"Array": {
-			value: bson.A{int32(42), "foo", nil},
-			expectedIDs: []any{
-				"array", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three-reverse",
-			},
-		},
-		"ArrayReverse": {
-			value:       bson.A{nil, "foo", int32(42)},
-			expectedIDs: []any{"array-empty", "array-empty-nested", "array-null"},
-		},
-		"ArrayNull": {
-			value:       bson.A{nil},
-			expectedIDs: []any{"array-empty", "array-empty-nested"},
-		},
-		"ArrayEmbedded": {
-			value: bson.A{bson.A{int32(42), "foo"}, nil},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"LongArrayEmbedded": {
-			value: bson.A{bson.A{int32(42), "foo"}, nil, "foo"},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArraySlice": {
-			value: bson.A{int32(42), "foo"},
-			expectedIDs: []any{
-				"array", "array-empty", "array-empty-nested", "array-last-embedded", "array-middle-embedded",
-				"array-null", "array-three-reverse",
-			},
-		},
-		"ArrayShuffledValues": {
-			value: bson.A{"foo", nil, int32(42)},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
+		// TODO document, array
 
 		"Double": {
 			value: 43.13,
@@ -1109,7 +931,7 @@ func TestQueryComparisonLt(t *testing.T) {
 			err: &mongo.CommandError{
 				Code:    2,
 				Name:    "BadValue",
-				Message: "Can't have RegEx as arg to predicate over field 'v'.",
+				Message: "Can't have RegEx as arg to predicate over field 'value'.",
 			},
 		},
 
@@ -1165,7 +987,7 @@ func TestQueryComparisonLt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$lt", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$lt", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -1183,73 +1005,16 @@ func TestQueryComparisonLt(t *testing.T) {
 }
 
 func TestQueryComparisonLte(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		value       any
 		expectedIDs []any
 		err         *mongo.CommandError
 	}{
-		// TODO document
-
-		"ArrayEmpty": {
-			value:       bson.A{},
-			expectedIDs: []any{"array-empty", "array-empty-nested"},
-		},
-		"ArrayOne": {
-			value: bson.A{int32(42)},
-			expectedIDs: []any{
-				"array", "array-empty", "array-empty-nested", "array-last-embedded", "array-middle-embedded",
-				"array-null", "array-three-reverse",
-			},
-		},
-		"Array": {
-			value: bson.A{int32(42), "foo", nil},
-			expectedIDs: []any{
-				"array", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse",
-			},
-		},
-		"ArrayReverse": {
-			value:       bson.A{nil, "foo", int32(42)},
-			expectedIDs: []any{"array-empty", "array-empty-nested", "array-null", "array-three-reverse"},
-		},
-		"ArrayNull": {
-			value:       bson.A{nil},
-			expectedIDs: []any{"array-empty", "array-empty-nested", "array-null"},
-		},
-		"ArrayEmbedded": {
-			value: bson.A{bson.A{int32(42), "foo"}, nil},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"LongArrayEmbedded": {
-			value: bson.A{bson.A{int32(42), "foo"}, nil, "foo"},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
-		"ArraySlice": {
-			value: bson.A{int32(42), "foo"},
-			expectedIDs: []any{
-				"array", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three-reverse",
-			},
-		},
-		"ArrayShuffledValues": {
-			value: bson.A{"foo", nil, int32(42)},
-			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded",
-				"array-last-embedded", "array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
-			},
-		},
+		// TODO document, array
 
 		"Double": {
 			value: 42.13,
@@ -1331,11 +1096,8 @@ func TestQueryComparisonLte(t *testing.T) {
 		},
 
 		"Null": {
-			value: nil,
-			expectedIDs: []any{
-				"array-first-embedded", "array-last-embedded", "array-middle-embedded", "array-null",
-				"array-three", "array-three-reverse", "null",
-			},
+			value:       nil,
+			expectedIDs: []any{"array-embedded", "array-null", "array-three", "array-three-reverse", "null"},
 		},
 
 		"Regex": {
@@ -1343,7 +1105,7 @@ func TestQueryComparisonLte(t *testing.T) {
 			err: &mongo.CommandError{
 				Code:    2,
 				Name:    "BadValue",
-				Message: "Can't have RegEx as arg to predicate over field 'v'.",
+				Message: "Can't have RegEx as arg to predicate over field 'value'.",
 			},
 		},
 
@@ -1392,7 +1154,7 @@ func TestQueryComparisonLte(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$lte", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$lte", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -1410,20 +1172,18 @@ func TestQueryComparisonLte(t *testing.T) {
 }
 
 func TestQueryComparisonNin(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	var scalarDataTypesFilter bson.A
 	for _, scalarDataType := range shareddata.Scalars.Docs() {
-		scalarDataTypesFilter = append(scalarDataTypesFilter, scalarDataType.Map()["v"])
+		scalarDataTypesFilter = append(scalarDataTypesFilter, scalarDataType.Map()["value"])
 	}
 
 	var compositeDataTypesFilter bson.A
 	for _, compositeDataType := range shareddata.Composites.Docs() {
-		compositeDataTypesFilter = append(compositeDataTypesFilter, compositeDataType.Map()["v"])
+		compositeDataTypesFilter = append(compositeDataTypesFilter, compositeDataType.Map()["value"])
 	}
 
 	for name, tc := range map[string]struct {
@@ -1432,11 +1192,8 @@ func TestQueryComparisonNin(t *testing.T) {
 		err         *mongo.CommandError
 	}{
 		"ForScalarDataTypes": {
-			value: scalarDataTypesFilter,
-			expectedIDs: []any{
-				"array-embedded", "array-empty", "array-empty-nested", "document", "document-composite",
-				"document-composite-reverse", "document-empty", "document-null",
-			},
+			value:       scalarDataTypesFilter,
+			expectedIDs: []any{"array-empty", "document", "document-composite", "document-composite-reverse", "document-empty", "document-null"},
 		},
 		"ForCompositeDataTypes": {
 			value: compositeDataTypesFilter,
@@ -1467,8 +1224,7 @@ func TestQueryComparisonNin(t *testing.T) {
 		"Regex": {
 			value: bson.A{primitive.Regex{Pattern: "foo", Options: "i"}},
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -1506,7 +1262,7 @@ func TestQueryComparisonNin(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$nin", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$nin", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -1524,20 +1280,18 @@ func TestQueryComparisonNin(t *testing.T) {
 }
 
 func TestQueryComparisonIn(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	var scalarDataTypesFilter bson.A
 	for _, scalarDataType := range shareddata.Scalars.Docs() {
-		scalarDataTypesFilter = append(scalarDataTypesFilter, scalarDataType.Map()["v"])
+		scalarDataTypesFilter = append(scalarDataTypesFilter, scalarDataType.Map()["value"])
 	}
 
 	var compositeDataTypesFilter bson.A
 	for _, compositeDataType := range shareddata.Composites.Docs() {
-		compositeDataTypesFilter = append(compositeDataTypesFilter, compositeDataType.Map()["v"])
+		compositeDataTypesFilter = append(compositeDataTypesFilter, compositeDataType.Map()["value"])
 	}
 
 	for name, tc := range map[string]struct {
@@ -1548,8 +1302,7 @@ func TestQueryComparisonIn(t *testing.T) {
 		"ForScalarDataTypes": {
 			value: scalarDataTypesFilter,
 			expectedIDs: []any{
-				"array", "array-first-embedded", "array-last-embedded", "array-middle-embedded", "array-null",
-				"array-three", "array-three-reverse", "array-two",
+				"array", "array-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
 				"binary", "binary-empty",
 				"bool-false", "bool-true",
 				"datetime", "datetime-epoch", "datetime-year-max", "datetime-year-min",
@@ -1567,8 +1320,7 @@ func TestQueryComparisonIn(t *testing.T) {
 		"ForCompositeDataTypes": {
 			value: compositeDataTypesFilter,
 			expectedIDs: []any{
-				"array", "array-embedded", "array-empty", "array-empty-nested", "array-first-embedded", "array-last-embedded",
-				"array-middle-embedded", "array-null", "array-three", "array-three-reverse", "array-two",
+				"array", "array-embedded", "array-empty", "array-null", "array-three", "array-three-reverse", "array-two",
 				"document", "document-composite", "document-composite-reverse", "document-empty", "document-null",
 			},
 		},
@@ -1607,7 +1359,7 @@ func TestQueryComparisonIn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$in", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$in", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				require.Nil(t, tc.expectedIDs)
@@ -1625,11 +1377,9 @@ func TestQueryComparisonIn(t *testing.T) {
 }
 
 func TestQueryComparisonNe(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
 	providers := []shareddata.Provider{shareddata.Scalars, shareddata.Composites}
-	ctx, collection := setup.Setup(t, providers...)
+	ctx, collection := setup(t, providers...)
 
 	for name, tc := range map[string]struct {
 		value        any
@@ -1641,7 +1391,7 @@ func TestQueryComparisonNe(t *testing.T) {
 			unexpectedID: "document-composite",
 		},
 		"DocumentShuffledKeys": {
-			value:        bson.D{{"v", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}},
+			value:        bson.D{{"value", bson.D{{"42", "foo"}, {"array", bson.A{int32(42), "foo", nil}}, {"foo", int32(42)}}}},
 			unexpectedID: "",
 		},
 
@@ -1651,7 +1401,7 @@ func TestQueryComparisonNe(t *testing.T) {
 		},
 		"ArrayEmbedded": {
 			value:        bson.A{bson.A{int32(42), "foo"}, nil},
-			unexpectedID: "array-first-embedded",
+			unexpectedID: "array-embedded",
 		},
 		"LongArrayEmbedded": {
 			value:        bson.A{bson.A{int32(42), "foo"}, nil, "foo"},
@@ -1808,7 +1558,7 @@ func TestQueryComparisonNe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			filter := bson.D{{"v", bson.D{{"$ne", tc.value}}}}
+			filter := bson.D{{"value", bson.D{{"$ne", tc.value}}}}
 			cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"_id", 1}}))
 			if tc.err != nil {
 				AssertEqualError(t, *tc.err, err)
@@ -1825,10 +1575,8 @@ func TestQueryComparisonNe(t *testing.T) {
 }
 
 func TestQueryComparisonMultipleOperators(t *testing.T) {
-	setup.SkipForTigris(t)
-
 	t.Parallel()
-	ctx, collection := setup.Setup(t, shareddata.Scalars, shareddata.Composites)
+	ctx, collection := setup(t, shareddata.Scalars, shareddata.Composites)
 
 	for name, tc := range map[string]struct {
 		filter      any
@@ -1838,14 +1586,14 @@ func TestQueryComparisonMultipleOperators(t *testing.T) {
 		"InLteGte": {
 			filter: bson.D{
 				{"_id", bson.D{{"$in", bson.A{"int32"}}}},
-				{"v", bson.D{{"$lte", int32(42)}, {"$gte", int32(0)}}},
+				{"value", bson.D{{"$lte", int32(42)}, {"$gte", int32(0)}}},
 			},
 			expectedIDs: []any{"int32"},
 		},
 		"NinEqNe": {
 			filter: bson.D{
 				{"_id", bson.D{{"$nin", bson.A{"int64"}}, {"$ne", "int32"}}},
-				{"v", bson.D{{"$eq", int32(42)}}},
+				{"value", bson.D{{"$eq", int32(42)}}},
 			},
 			expectedIDs: []any{"array", "array-three", "array-three-reverse", "double-whole"},
 		},

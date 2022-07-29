@@ -1,17 +1,14 @@
 ---
-# Attention! This workflow uses `pull_request_target` event that has access to secrets.
-# If you modify this workflow, make sure that you don't introduce dangerous steps.
-# See also: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/.
 name: Conform PR
 on:
-  pull_request_target:
-    # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target
+  pull_request:
+    # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
     # List all types to make it easier to enable new ones when they are needed.
     types:
       # - assigned
       # - unassigned
       # - labeled
-      - unlabeled # if GitHub Actions stuck, add and remove "no ci" label to force rebuild
+      # - unlabeled
       - opened
       - edited
       # - closed
@@ -27,9 +24,9 @@ on:
       # - auto_merge_disabled
 
 # Stop pending and in-progress jobs of this workflow.
-# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#example-using-a-fallback-value
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#example-only-cancel-in-progress-jobs-or-runs-for-the-current-workflow
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -38,18 +35,13 @@ env:
   GOLANGCI_LINT_CACHE: /home/runner/go/cache/lint
   GOMODCACHE: /home/runner/go/mod
   GOPROXY: https://proxy.golang.org
-  CONFORM_TOKEN: ${{ secrets.CONFORM_TOKEN }} # GITHUB_TOKEN is not enough to query projects, so we use a special one
 
 jobs:
   conform-pr:
     name: Conform PR
     runs-on: ubuntu-20.04
 
-    if: github.event_name != 'pull_request_target' || !contains(github.event.pull_request.labels.*.name, 'no ci')
-
     steps:
-      # Warning! Be careful about changing the steps here as it might cause some security problems
-      # (see the Attention block on the top of this file).
       - name: Setup Go
         uses: FerretDB/github-actions/setup-go@main
         with:
